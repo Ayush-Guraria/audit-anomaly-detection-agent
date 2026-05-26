@@ -1,2 +1,109 @@
-# audit-anomaly-detection-agent
-Anomaly detection with explainable AI for financial transactions
+# Audit Anomaly Detection Agent
+
+Financial institutions process millions of transactions daily. Traditional rule-based fraud systems are brittle — they catch known patterns but miss novel ones and flood analysts with false positives. Classical ML (isolation forest, XGBoost) can surface statistically unusual transactions, but it produces a score, not a story. This tool closes that gap: an ensemble model flags the anomalies, and a RAG-powered Claude agent reads the relevant internal policy documents and writes a plain-English explanation of *why* each transaction is suspicious and what the analyst should do next.
+
+---
+
+## What This Demonstrates
+
+| Capability | Implementation |
+|---|---|
+| **Classical ML ensemble** | Isolation Forest + XGBoost + Logistic Regression; scores combined into a single `ensemble_score` |
+| **RAG over policy documents** | ChromaDB vector store, sentence-transformers embeddings, top-k retrieval at query time |
+| **LLM-powered explainability** | Claude (claude-sonnet) generates structured JSON: explanation, policy citations, follow-up actions, confidence |
+| **Self-service Streamlit app** | Three-tab UI — anomaly review table, explanation panel, audit trail log |
+| **Audit trail logging** | Every user action (role switch, transaction selected, explanation generated) written to SQLite |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Raw CSV\nKaggle dataset] --> B[ML Training\nJupyter Notebook]
+    B --> C[Trained Models\n.pkl files]
+    C --> D[Scored Transactions\n.parquet]
+    F[Policy Docs\n.md files] --> G[RAG Index\nChromaDB]
+    D --> E[Streamlit UI]
+    E -->|flagged transaction| G
+    G -->|top-k policy chunks| H[Claude API\nclaude-sonnet]
+    H -->|structured JSON| E
+    E --> I[Audit Log\nSQLite]
+```
+
+---
+
+## Tech Stack
+
+- **ML:** scikit-learn (IsolationForest, LogisticRegression), XGBoost, pandas, numpy
+- **LLM:** Anthropic Python SDK, Claude claude-sonnet
+- **RAG:** ChromaDB (persistent vector store), sentence-transformers (`all-MiniLM-L6-v2`)
+- **App:** Streamlit
+- **Storage:** parquet (scored transactions), SQLite (audit log)
+- **Python:** 3.11+, pathlib, python-dotenv
+
+---
+
+## How to Run Locally
+
+**1. Clone and install dependencies**
+```bash
+git clone <repo-url>
+cd audit-anomaly-detection-agent
+pip install -r requirements.txt
+```
+
+**2. Set your Anthropic API key**
+```bash
+# Create a .env file at the repo root
+echo ANTHROPIC_API_KEY=sk-ant-... > .env
+```
+
+**3. Place the scored transactions file**
+```
+data/scored_transactions.parquet
+```
+This is produced by the training notebook in `notebooks/`. The raw Kaggle dataset (`IEEE-CIS Fraud Detection`) goes in `data/` and is gitignored.
+
+**4. Build the RAG index**
+```bash
+python -c "from src.rag_index import build_index; build_index()"
+```
+
+**5. Run the app**
+```bash
+streamlit run app.py
+```
+
+Open `http://localhost:8501`. Select a transaction in Tab 1, switch to Tab 2, and click **Generate Explanation**.
+
+**Run smoke tests**
+```bash
+python -m pytest src/
+```
+
+---
+
+## Limitations
+
+- **Synthetic policy documents** — the three `.md` files in `policies/` are illustrative placeholders, not real compliance documents.
+- **Mock RBAC** — the Reviewer / Senior Auditor role selector is UI-only; no authentication or permission enforcement backs it.
+- **Public Kaggle dataset** — trained on the [IEEE-CIS Fraud Detection](https://www.kaggle.com/c/ieee-fraud-detection) dataset; performance on real production data is unknown.
+- **No model versioning** — a single `.pkl` artifact per model; no experiment tracking or rollback.
+- **No production monitoring** — score drift, data drift, and model staleness are not tracked.
+- **Single LLM** — no fallback if the Claude API is unavailable or rate-limited.
+
+---
+
+## What's Next (Production Checklist)
+
+- Replace placeholder policies with real compliance and AML documentation
+- Enforce RBAC via an identity provider (OAuth / SAML); log access at the API layer
+- Add model versioning with MLflow or a model registry; track experiment lineage
+- Instrument score drift with Evidently AI or Arize; set up alerting thresholds
+- Multi-LLM fallback (e.g. Claude → GPT-4o) for resilience
+- Containerise with Docker; deploy behind an internal reverse proxy with SSO
+
+---
+
+*Built with [Claude Code](https://claude.ai/code)*

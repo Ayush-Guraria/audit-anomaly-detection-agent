@@ -11,6 +11,7 @@ _EXPECTED_KEYS = ("explanation", "policy_references", "suggested_followup_action
 
 
 def _build_query(transaction: dict, scores: dict) -> str:
+    """Build a retrieval query phrased to match language in the policy documents."""
     amt = transaction.get("TransactionAmt", "unknown")
     product = transaction.get("ProductCD", "unknown")
     return f"fraud review {product} transaction amount {amt} escalation policy anomaly detection"

@@ -7,6 +7,10 @@ from pathlib import Path
 
 
 def _get_db_path(db_path: Path | None = None) -> Path:
+    """Return db_path if provided, otherwise derive the default path from config.
+
+    The deferred import avoids a circular dependency at module load time.
+    """
     if db_path is not None:
         return db_path
     from src.config import get_config

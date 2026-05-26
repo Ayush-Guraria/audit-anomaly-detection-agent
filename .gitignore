@@ -221,3 +221,5 @@ __marimo__/
 models/*.pkl
 data/*.parquet
 data/*.csv
+.chroma_db/
+audit_log.db
