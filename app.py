@@ -2,11 +2,9 @@
 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from plotly.subplots import make_subplots
 from streamlit_plotly_events import plotly_events
 
 from src.audit_log import get_recent_logs, log_action
@@ -14,11 +12,101 @@ from src.explain import explain_transaction
 from src.rag_index import build_index
 
 # ---------------------------------------------------------------------------
-# Constants
+# Color system — every color reference below must use these names
 # ---------------------------------------------------------------------------
-_SCORE_COLS = ["iso_score", "xgb_score", "lr_score", "ensemble_score"]
-_CHART_H = 300
+ACCENT         = "#00B4D8"   # teal  — clean transactions, default bars
+DANGER         = "#E63946"   # red   — flagged/fraud signals, threshold lines
+NEUTRAL        = "#8D99AE"   # grey  — secondary elements, gridlines, captions
+TEXT_PRIMARY   = "#FFFFFF"   # white — titles and primary labels
+TEXT_SECONDARY = "#ADB5BD"   # light grey — axis labels, subtitles, captions
+BG_CHART       = "#1A1A2E"   # chart plot-area background
+BG_PAPER       = "#16213E"   # chart paper / outer background
+_GRID          = "rgba(141, 153, 174, 0.30)"  # NEUTRAL @ 30% opacity — gridlines
+
+# ---------------------------------------------------------------------------
+# Layout constants
+# ---------------------------------------------------------------------------
+_SCORE_COLS   = ["iso_score", "xgb_score", "lr_score", "ensemble_score"]
+_CHART_H      = 300
 _CHART_MARGIN = dict(t=40, b=30, l=40, r=10)
+_FONT         = "Inter, Arial, sans-serif"
+
+# ---------------------------------------------------------------------------
+# CSS — injected once in main(); combines metric cards + sidebar styling
+# ---------------------------------------------------------------------------
+_CSS = f"""
+<style>
+[data-testid="stMetric"] {{
+    background-color: {BG_PAPER};
+    border: 1px solid {ACCENT};
+    border-radius: 8px;
+    padding: 16px;
+}}
+[data-testid="stMetric"] label {{
+    color: {TEXT_SECONDARY} !important;
+    font-size: 11px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}}
+[data-testid="stMetric"] [data-testid="stMetricValue"] {{
+    color: {TEXT_PRIMARY} !important;
+    font-size: 24px !important;
+    font-weight: 700;
+}}
+[data-testid="stMetricDelta"] {{
+    font-size: 11px !important;
+}}
+[data-testid="stSidebar"] {{
+    background-color: {BG_PAPER};
+    border-right: 1px solid {ACCENT};
+}}
+[data-testid="stSidebar"] label {{
+    color: {TEXT_SECONDARY} !important;
+    font-size: 11px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}}
+</style>
+"""
+
+
+# ---------------------------------------------------------------------------
+# Shared chart layout factory
+# ---------------------------------------------------------------------------
+
+def make_chart_layout(title: str, xaxis_title: str = "",
+                      yaxis_title: str = "", **extra) -> dict:
+    """Return a Plotly layout dict with consistent professional styling.
+
+    Keyword arguments in *extra* are merged last, enabling per-chart
+    overrides (e.g. barmode, showlegend, yaxis nested keys).
+    """
+    layout: dict = dict(
+        title=dict(
+            text=title,
+            font=dict(family=_FONT, size=14, color=TEXT_PRIMARY),
+            x=0,
+        ),
+        xaxis=dict(
+            title=dict(text=xaxis_title,
+                       font=dict(family=_FONT, size=11, color=TEXT_SECONDARY)),
+            tickfont=dict(family=_FONT, size=10, color=TEXT_SECONDARY),
+            gridcolor=_GRID, gridwidth=1, showgrid=True,
+        ),
+        yaxis=dict(
+            title=dict(text=yaxis_title,
+                       font=dict(family=_FONT, size=11, color=TEXT_SECONDARY)),
+            tickfont=dict(family=_FONT, size=10, color=TEXT_SECONDARY),
+            gridcolor=_GRID, gridwidth=1, showgrid=True,
+        ),
+        plot_bgcolor=BG_CHART,
+        paper_bgcolor=BG_PAPER,
+        font=dict(family=_FONT, color=TEXT_PRIMARY),
+        height=_CHART_H,
+        margin=_CHART_MARGIN,
+    )
+    layout.update(extra)
+    return layout
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +146,7 @@ def _init_session_state(full_df: pd.DataFrame) -> None:
         "click_filter_product": None,
         "click_filter_domain": None,
         "explanation_cache": {},
-        # widget keys — used so "Clear All Filters" can reset them
+        # widget keys — written by "Clear All Filters" to reset controls
         "score_threshold": 0.6,
         "product_filter": sorted(full_df["ProductCD"].dropna().unique().tolist()),
         "card_filter": sorted(full_df["card4"].dropna().unique().tolist()),
@@ -78,7 +166,7 @@ def _render_sidebar(full_df: pd.DataFrame) -> dict:
         st.header("Filters")
 
         all_products = sorted(full_df["ProductCD"].dropna().unique().tolist())
-        all_cards = sorted(full_df["card4"].dropna().unique().tolist())
+        all_cards    = sorted(full_df["card4"].dropna().unique().tolist())
 
         prev_role = st.session_state.current_role
         role = st.selectbox("Role", ["Reviewer", "Senior Auditor"],
@@ -93,29 +181,30 @@ def _render_sidebar(full_df: pd.DataFrame) -> dict:
                               step=0.05, key="score_threshold")
         products = st.multiselect("Product Category", all_products,
                                   key="product_filter")
-        cards = st.multiselect("Card Type", all_cards, key="card_filter")
+        cards    = st.multiselect("Card Type", all_cards, key="card_filter")
 
         st.divider()
 
         if st.button("Clear All Filters", use_container_width=True):
-            st.session_state["score_threshold"] = 0.0
-            st.session_state["product_filter"] = all_products
-            st.session_state["card_filter"] = all_cards
+            st.session_state["score_threshold"]  = 0.0
+            st.session_state["product_filter"]   = all_products
+            st.session_state["card_filter"]      = all_cards
             st.session_state.click_filter_product = None
-            st.session_state.click_filter_domain = None
+            st.session_state.click_filter_domain  = None
             st.rerun()
 
         active = sum([
             threshold > 0.0,
             set(products) != set(all_products),
-            set(cards) != set(all_cards),
+            set(cards)    != set(all_cards),
             st.session_state.click_filter_product is not None,
-            st.session_state.click_filter_domain is not None,
+            st.session_state.click_filter_domain  is not None,
         ])
         if active:
             st.info(f"{active} filter{'s' if active != 1 else ''} active")
 
-    return {"threshold": threshold, "products": products, "cards": cards, "role": role}
+    return {"threshold": threshold, "products": products,
+            "cards": cards, "role": role}
 
 
 # ---------------------------------------------------------------------------
@@ -149,25 +238,24 @@ def _apply_filters(full_df: pd.DataFrame, filters: dict) -> pd.DataFrame:
 def _kpi_row(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
              threshold: float) -> None:
     """Render 5 KPI metric cards."""
-    total = len(full_df)
-    flagged = len(filtered_df)
+    total    = len(full_df)
+    flagged  = len(filtered_df)
     pct_of_total = flagged / total * 100 if total else 0.0
 
     baseline_fraud = full_df["isFraud"].mean() * 100 if total else 0.0
-    filtered_fraud = (filtered_df["isFraud"].mean() * 100
-                      if flagged else 0.0)
+    filtered_fraud = filtered_df["isFraud"].mean() * 100 if flagged else 0.0
 
     avg_score = filtered_df["ensemble_score"].mean() if flagged else 0.0
-    max_amt = filtered_df["TransactionAmt"].max() if flagged else 0.0
+    max_amt   = filtered_df["TransactionAmt"].max() if flagged else 0.0
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("High Risk Flagged", f"{flagged:,}",
+    c1.metric("High Risk Flagged",   f"{flagged:,}",
               f"{pct_of_total:.1f}% of total")
     c2.metric("True Fraud Detected", f"{filtered_fraud:.1f}%",
               f"{filtered_fraud - baseline_fraud:+.1f}% vs baseline")
-    c3.metric("Avg Ensemble Score", f"{avg_score:.3f}")
+    c3.metric("Avg Ensemble Score",  f"{avg_score:.3f}")
     c4.metric("Highest Risk Amount", f"${max_amt:,.2f}")
-    c5.metric("Dataset Coverage", f"Showing {flagged:,}",
+    c5.metric("Dataset Coverage",    f"Showing {flagged:,}",
               f"of {total:,} transactions")
 
 
@@ -177,65 +265,89 @@ def _kpi_row(filtered_df: pd.DataFrame, full_df: pd.DataFrame,
 
 def _chart_score_dist(col: st.delta_generator.DeltaGenerator,
                       filtered_df: pd.DataFrame, threshold: float) -> None:
-    """Score distribution histogram: grey below threshold, red above."""
+    """Score distribution histogram: ACCENT below threshold, DANGER above."""
     below = filtered_df.loc[filtered_df["ensemble_score"] < threshold,
                             "ensemble_score"]
     above = filtered_df.loc[filtered_df["ensemble_score"] >= threshold,
                             "ensemble_score"]
     fig = go.Figure()
     fig.add_trace(go.Histogram(x=below, name="Below threshold",
-                               marker_color="grey", opacity=0.7))
+                               marker_color=ACCENT, opacity=0.7))
     fig.add_trace(go.Histogram(x=above, name="At/above threshold",
-                               marker_color="crimson", opacity=0.7))
-    fig.add_vline(x=threshold, line_dash="dash", line_color="red",
-                  annotation_text=f"≥{threshold}")
-    fig.update_layout(title="Score Distribution", barmode="overlay",
-                      xaxis_title="Ensemble Score",
-                      yaxis_title="Transaction Count",
-                      height=_CHART_H, margin=_CHART_MARGIN, showlegend=False)
+                               marker_color=DANGER, opacity=0.7))
+    fig.add_vline(x=threshold, line_dash="dash", line_color=DANGER,
+                  annotation_text=f">={threshold} flagged",
+                  annotation_font_color=DANGER, annotation_font_size=10)
+    fig.update_layout(**make_chart_layout(
+        "Score Distribution", "Ensemble Score", "Transaction Count",
+        barmode="overlay", showlegend=False,
+    ))
     col.plotly_chart(fig, use_container_width=True)
 
 
 def _chart_scatter(col: st.delta_generator.DeltaGenerator,
                    filtered_df: pd.DataFrame, threshold: float) -> None:
-    """TransactionAmt vs ensemble_score scatter, coloured by isFraud."""
+    """Amount vs risk score scatter: ACCENT=Clean, DANGER=Confirmed Fraud."""
     sample = (filtered_df.sample(500, random_state=42)
               if len(filtered_df) > 500 else filtered_df)
-    colors = sample["isFraud"].map({1: "crimson", 0: "steelblue"})
-    fig = go.Figure(go.Scatter(
-        x=sample["ensemble_score"], y=sample["TransactionAmt"],
-        mode="markers",
-        marker=dict(color=colors, opacity=0.6, size=5),
-        text=sample["TransactionID"].astype(str),
+    clean = sample[sample["isFraud"] == 0]
+    fraud = sample[sample["isFraud"] == 1]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=clean["ensemble_score"], y=clean["TransactionAmt"],
+        mode="markers", name="Clean",
+        marker=dict(color=ACCENT, opacity=0.6, size=6),
+        text=clean["TransactionID"].astype(str),
         hovertemplate="ID: %{text}<br>Score: %{x:.3f}<br>Amt: $%{y:,.2f}<extra></extra>",
     ))
-    fig.add_vline(x=threshold, line_dash="dash", line_color="red")
-    fig.update_layout(title="Amount vs Risk Score",
-                      xaxis_title="Ensemble Score",
-                      yaxis_title="Transaction Amount ($, log scale)",
-                      yaxis_type="log",
-                      height=_CHART_H, margin=_CHART_MARGIN)
+    fig.add_trace(go.Scatter(
+        x=fraud["ensemble_score"], y=fraud["TransactionAmt"],
+        mode="markers", name="Confirmed Fraud",
+        marker=dict(color=DANGER, opacity=0.9, size=8),
+        text=fraud["TransactionID"].astype(str),
+        hovertemplate="ID: %{text}<br>Score: %{x:.3f}<br>Amt: $%{y:,.2f}<extra></extra>",
+    ))
+    fig.add_vline(x=threshold, line_dash="dash", line_color=DANGER)
+
+    layout = make_chart_layout(
+        "Amount vs Risk Score", "Ensemble Score",
+        "Transaction Amount ($, log scale)",
+        showlegend=True,
+    )
+    layout["yaxis"]["type"] = "log"
+    layout["legend"] = dict(font=dict(family=_FONT, color=TEXT_SECONDARY, size=10),
+                            bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(**layout)
     col.plotly_chart(fig, use_container_width=True)
 
 
 def _chart_product_bar(col: st.delta_generator.DeltaGenerator,
                        filtered_df: pd.DataFrame) -> None:
-    """Average risk score by product category; click to filter (toggle)."""
+    """Avg risk by product: highest bar DANGER, rest ACCENT; click to filter."""
     agg = (filtered_df.groupby("ProductCD")["ensemble_score"]
            .mean()
            .sort_values(ascending=True)
            .reset_index())
+
+    top_idx  = agg["ensemble_score"].idxmax() if not agg.empty else None
     selected = st.session_state.click_filter_product
-    colors = ["crimson" if p == selected else "steelblue"
-              for p in agg["ProductCD"]]
+    colors = [
+        DANGER if (i == top_idx or agg.loc[i, "ProductCD"] == selected)
+        else ACCENT
+        for i in agg.index
+    ]
     fig = go.Figure(go.Bar(
         x=agg["ensemble_score"], y=agg["ProductCD"],
         orientation="h", marker_color=colors,
+        text=[f"{v:.3f}" for v in agg["ensemble_score"]],
+        textposition="outside",
+        textfont=dict(family=_FONT, color=TEXT_SECONDARY, size=10),
         hovertemplate="%{y}: %{x:.3f}<extra></extra>",
     ))
-    fig.update_layout(title="Risk by Product Category",
-                      xaxis_title="Avg Ensemble Score",
-                      height=_CHART_H, margin=_CHART_MARGIN)
+    fig.update_layout(**make_chart_layout(
+        "Risk by Product Category", "Avg Ensemble Score", "",
+    ))
     with col:
         clicks = plotly_events(fig, click_event=True,
                                key="product_chart", override_height=_CHART_H)
@@ -245,8 +357,6 @@ def _chart_product_bar(col: st.delta_generator.DeltaGenerator,
                 None if st.session_state.click_filter_product == val else val)
             st.rerun()
         st.caption("Click a bar to filter")
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -260,9 +370,9 @@ def _transaction_table(filtered_df: pd.DataFrame, role: str) -> None:
            .reset_index(drop=True))
 
     display = top.copy()
-    display["TransactionAmt"] = display["TransactionAmt"].map("${:,.2f}".format)
-    display["ensemble_score"] = display["ensemble_score"].map("{:.3f}".format)
-    display["isFraud"] = display["isFraud"].map({1: "Fraud", 0: "Clean"})
+    display["TransactionAmt"]  = display["TransactionAmt"].map("${:,.2f}".format)
+    display["ensemble_score"]  = display["ensemble_score"].map("{:.3f}".format)
+    display["isFraud"]         = display["isFraud"].map({1: "Fraud", 0: "Clean"})
 
     show_cols = [c for c in [
         "TransactionID", "TransactionAmt", "ProductCD", "card4",
@@ -295,10 +405,8 @@ def _show_tx_detail(row: pd.Series) -> None:
     )
     left, right = st.columns(2)
     half = len(detail_df) // 2
-    left.dataframe(detail_df.iloc[:half], hide_index=True,
-                   use_container_width=True)
-    right.dataframe(detail_df.iloc[half:], hide_index=True,
-                    use_container_width=True)
+    left.dataframe(detail_df.iloc[:half],   hide_index=True, use_container_width=True)
+    right.dataframe(detail_df.iloc[half:],  hide_index=True, use_container_width=True)
 
 
 def _show_score_metrics(row: pd.Series) -> None:
@@ -328,15 +436,15 @@ def _show_explanation_result(result: dict) -> None:
 
     confidence = result.get("confidence", "low").lower()
     if confidence == "high":
-        st.success(f"Confidence: High")
+        st.success("Confidence: High")
     elif confidence == "medium":
-        st.warning(f"Confidence: Medium")
+        st.warning("Confidence: Medium")
     else:
-        st.error(f"Confidence: Low")
+        st.error("Confidence: Low")
 
 
 def _explanation_panel(full_df: pd.DataFrame, role: str) -> None:
-    """Expander below the table showing detail + Claude explanation."""
+    """Expander below the table showing transaction detail + Claude explanation."""
     tx_id = st.session_state.selected_transaction_id
     if tx_id is None:
         return
@@ -378,11 +486,11 @@ def _explanation_panel(full_df: pd.DataFrame, role: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _tab_dashboard(full_df: pd.DataFrame) -> None:
-    """Tab 1: sidebar filters, KPIs, 1×3 chart row, table, explanation."""
-    filters = _render_sidebar(full_df)
+    """Tab 1: sidebar filters, KPIs, 1x3 chart row, table, explanation."""
+    filters     = _render_sidebar(full_df)
     filtered_df = _apply_filters(full_df, filters)
-    threshold = filters["threshold"]
-    role = filters["role"]
+    threshold   = filters["threshold"]
+    role        = filters["role"]
 
     _kpi_row(filtered_df, full_df, threshold)
     st.divider()
@@ -420,6 +528,7 @@ def _tab_audit_trail() -> None:
 def main() -> None:
     st.set_page_config(page_title="Audit Anomaly Detection",
                        layout="wide", page_icon="🔍")
+    st.markdown(_CSS, unsafe_allow_html=True)
     st.title("Audit Anomaly Detection Agent")
 
     _init_rag_index()
