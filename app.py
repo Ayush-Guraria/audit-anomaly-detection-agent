@@ -5,7 +5,6 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit_plotly_events import plotly_events
 
 from src.audit_log import get_recent_logs, log_action
 from src.explain import explain_transaction
@@ -124,7 +123,7 @@ def _init_rag_index() -> None:
     build_index()
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_data() -> pd.DataFrame:
     """Load scored_transactions.parquet and derive TransactionHour if possible."""
     path = Path(__file__).parent / "data" / "scored_transactions.parquet"
@@ -150,10 +149,21 @@ def _init_session_state(full_df: pd.DataFrame) -> None:
         "score_threshold": 0.6,
         "product_filter": sorted(full_df["ProductCD"].dropna().unique().tolist()),
         "card_filter": sorted(full_df["card4"].dropna().unique().tolist()),
+        "_product_select": "All",
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
+
+
+# ---------------------------------------------------------------------------
+# Filter callbacks — defined at module level so Streamlit can reference them
+# ---------------------------------------------------------------------------
+
+def _on_product_select() -> None:
+    """Sync the product selectbox widget state into click_filter_product."""
+    val = st.session_state.get("_product_select", "All")
+    st.session_state.click_filter_product = None if val == "All" else val
 
 
 # ---------------------------------------------------------------------------
@@ -186,11 +196,14 @@ def _render_sidebar(full_df: pd.DataFrame) -> dict:
         st.divider()
 
         if st.button("Clear All Filters", use_container_width=True):
-            st.session_state["score_threshold"]  = 0.0
-            st.session_state["product_filter"]   = all_products
-            st.session_state["card_filter"]      = all_cards
-            st.session_state.click_filter_product = None
-            st.session_state.click_filter_domain  = None
+            st.session_state.update({
+                "score_threshold": 0.0,
+                "product_filter": all_products,
+                "card_filter": all_cards,
+                "click_filter_product": None,
+                "click_filter_domain": None,
+                "_product_select": "All",
+            })
             st.rerun()
 
         active = sum([
@@ -324,7 +337,7 @@ def _chart_scatter(col: st.delta_generator.DeltaGenerator,
 
 def _chart_product_bar(col: st.delta_generator.DeltaGenerator,
                        filtered_df: pd.DataFrame) -> None:
-    """Avg risk by product: highest bar DANGER, rest ACCENT; click to filter."""
+    """Avg risk by product: highest bar DANGER, rest ACCENT; selectbox filter."""
     agg = (filtered_df.groupby("ProductCD")["ensemble_score"]
            .mean()
            .sort_values(ascending=True)
@@ -349,14 +362,10 @@ def _chart_product_bar(col: st.delta_generator.DeltaGenerator,
         "Risk by Product Category", "Avg Ensemble Score", "",
     ))
     with col:
-        clicks = plotly_events(fig, click_event=True,
-                               key="product_chart", override_height=_CHART_H)
-        if clicks:
-            val = clicks[0].get("y")
-            st.session_state.click_filter_product = (
-                None if st.session_state.click_filter_product == val else val)
-            st.rerun()
-        st.caption("Click a bar to filter")
+        st.plotly_chart(fig, use_container_width=True)
+        options = ["All"] + sorted(agg["ProductCD"].tolist())
+        st.selectbox("Filter by product:", options,
+                     key="_product_select", on_change=_on_product_select)
 
 
 # ---------------------------------------------------------------------------
