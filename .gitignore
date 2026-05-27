@@ -220,6 +220,7 @@ __marimo__/
 .env
 models/*.pkl
 data/*.parquet
+!data/scored_transactions.parquet
 data/*.csv
 .chroma_db/
 audit_log.db

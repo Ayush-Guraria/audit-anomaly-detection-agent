@@ -7,6 +7,7 @@ import streamlit as st
 
 from src.audit_log import get_recent_logs, log_action
 from src.explain import explain_transaction
+from src.rag_index import build_index
 
 _SCORE_COLS = ["iso_score", "xgb_score", "lr_score", "ensemble_score"]
 _DISPLAY_COLS = [
@@ -19,6 +20,17 @@ _DISPLAY_COLS = [
     "ensemble_score",
     "isFraud",
 ]
+
+
+@st.cache_resource
+def _init_rag_index() -> None:
+    """Build the ChromaDB policy index once per process lifetime.
+
+    @st.cache_resource ensures this runs exactly once on cold start and is
+    skipped on every subsequent Streamlit rerun. On Streamlit Community Cloud
+    the filesystem is ephemeral, so a cold start always triggers a fresh build.
+    """
+    build_index()
 
 
 @st.cache_data
@@ -167,6 +179,7 @@ def main() -> None:
     st.set_page_config(page_title="Audit Anomaly Detection", layout="wide")
     st.title("Audit Anomaly Detection Agent")
 
+    _init_rag_index()
     _init_session_state()
     df = load_data()
 

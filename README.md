@@ -59,18 +59,12 @@ pip install -r requirements.txt
 echo ANTHROPIC_API_KEY=sk-ant-... > .env
 ```
 
-**3. Place the scored transactions file**
-```
-data/scored_transactions.parquet
-```
-This is produced by the training notebook in `notebooks/`. The raw Kaggle dataset (`IEEE-CIS Fraud Detection`) goes in `data/` and is gitignored.
-
-**4. Build the RAG index**
+**3. Build the RAG index** *(once; the app auto-rebuilds this on Streamlit Cloud cold starts)*
 ```bash
 python -c "from src.rag_index import build_index; build_index()"
 ```
 
-**5. Run the app**
+**4. Run the app**
 ```bash
 streamlit run app.py
 ```
@@ -81,6 +75,26 @@ Open `http://localhost:8501`. Select a transaction in Tab 1, switch to Tab 2, an
 ```bash
 python -m pytest src/
 ```
+
+---
+
+## Deploy to Streamlit Community Cloud
+
+**1. Push the repo to GitHub** (fork or push — `scored_transactions.parquet` and the `policies/` docs are committed and travel with the repo)
+
+**2. Create a new app on [share.streamlit.io](https://share.streamlit.io)**
+- Repository: your GitHub repo
+- Branch: `main`
+- Main file: `app.py`
+
+**3. Add your API key under *Settings → Secrets***
+```toml
+ANTHROPIC_API_KEY = "sk-ant-..."
+```
+
+**4. Click Deploy.** On cold start the app automatically builds the ChromaDB index from the committed policy docs (`@st.cache_resource`), then loads the pre-scored parquet file. No manual setup required.
+
+> **Note:** Streamlit Community Cloud has an ephemeral filesystem — the ChromaDB index and `audit_log.db` are rebuilt/recreated on every cold start. This is fine for a portfolio demo.
 
 ---
 
