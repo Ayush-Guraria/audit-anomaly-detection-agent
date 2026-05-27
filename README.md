@@ -1,5 +1,7 @@
 # Audit Anomaly Detection Agent
 
+**Live demo:** [audit-anomaly-detection-agent-mvp.streamlit.app](https://audit-anomaly-detection-agent-mvp.streamlit.app/)
+
 Financial institutions process millions of transactions daily. Traditional rule-based fraud systems are brittle — they catch known patterns but miss novel ones and flood analysts with false positives. Classical ML (isolation forest, XGBoost) can surface statistically unusual transactions, but it produces a score, not a story. This tool closes that gap: an ensemble model flags the anomalies, and a RAG-powered Claude agent reads the relevant internal policy documents and writes a plain-English explanation of *why* each transaction is suspicious and what the analyst should do next.
 
 ---
@@ -69,7 +71,7 @@ python -c "from src.rag_index import build_index; build_index()"
 streamlit run app.py
 ```
 
-Open `http://localhost:8501`. Select a transaction in Tab 1, switch to Tab 2, and click **Generate Explanation**.
+Open `http://localhost:8501`, or use the [live demo](https://audit-anomaly-detection-agent-mvp.streamlit.app/). Select a transaction in Tab 1, switch to Tab 2, and click **Generate Explanation**.
 
 **Run smoke tests**
 ```bash
