@@ -212,7 +212,8 @@ def _chart_scatter(col: st.delta_generator.DeltaGenerator,
     fig.add_vline(x=threshold, line_dash="dash", line_color="red")
     fig.update_layout(title="Amount vs Risk Score",
                       xaxis_title="Ensemble Score",
-                      yaxis_title="Transaction Amount ($)",
+                      yaxis_title="Transaction Amount ($, log scale)",
+                      yaxis_type="log",
                       height=_CHART_H, margin=_CHART_MARGIN)
     col.plotly_chart(fig, use_container_width=True)
 
@@ -246,88 +247,6 @@ def _chart_product_bar(col: st.delta_generator.DeltaGenerator,
         st.caption("Click a bar to filter")
 
 
-def _chart_domain_bar(col: st.delta_generator.DeltaGenerator,
-                      filtered_df: pd.DataFrame, threshold: float) -> None:
-    """Top-10 flagged email domains; click to filter (toggle)."""
-    flagged = filtered_df[filtered_df["ensemble_score"] >= threshold]
-    top10 = (flagged.groupby("P_emaildomain")
-             .size()
-             .sort_values(ascending=False)
-             .head(10)
-             .sort_values(ascending=True)
-             .reset_index(name="count"))
-    selected = st.session_state.click_filter_domain
-    colors = ["crimson" if d == selected else "steelblue"
-              for d in top10["P_emaildomain"]]
-    fig = go.Figure(go.Bar(
-        x=top10["count"], y=top10["P_emaildomain"],
-        orientation="h", marker_color=colors,
-        hovertemplate="%{y}: %{x} txns<extra></extra>",
-    ))
-    fig.update_layout(title="Top Flagged Email Domains",
-                      xaxis_title="Flagged Count",
-                      height=_CHART_H, margin=_CHART_MARGIN)
-    with col:
-        clicks = plotly_events(fig, click_event=True,
-                               key="domain_chart", override_height=_CHART_H)
-        if clicks:
-            val = clicks[0].get("y")
-            st.session_state.click_filter_domain = (
-                None if st.session_state.click_filter_domain == val else val)
-            st.rerun()
-        st.caption("Click a bar to filter")
-
-
-def _chart_hour_bar(col: st.delta_generator.DeltaGenerator,
-                    full_df: pd.DataFrame, threshold: float) -> None:
-    """Flagged rate by hour of day (uses full dataset for global pattern)."""
-    if "TransactionDT" not in full_df.columns:
-        col.info("TransactionDT column not available — hour chart skipped.")
-        return
-    grp = full_df.groupby("TransactionHour")
-    rate = (grp.apply(lambda x: (x["ensemble_score"] >= threshold).sum() / len(x))
-            .reset_index(name="rate"))
-    fig = go.Figure(go.Bar(
-        x=rate["TransactionHour"], y=rate["rate"],
-        marker=dict(color=rate["rate"], colorscale="Reds",
-                    showscale=False),
-        hovertemplate="Hour %{x}: %{y:.1%}<extra></extra>",
-    ))
-    fig.update_layout(title="Flagged Rate by Hour",
-                      xaxis_title="Hour of Day (UTC)",
-                      yaxis_title="Flagged Rate",
-                      height=_CHART_H, margin=_CHART_MARGIN)
-    col.plotly_chart(fig, use_container_width=True)
-
-
-def _chart_volume_time(col: st.delta_generator.DeltaGenerator,
-                       full_df: pd.DataFrame) -> None:
-    """Transaction volume and fraud rate over time (dual-axis, full dataset)."""
-    if "TransactionDT" not in full_df.columns:
-        col.info("TransactionDT column not available — timeline chart skipped.")
-        return
-    df = full_df.copy()
-    _, edges = pd.cut(df["TransactionDT"], bins=50, retbins=True)
-    midpoints = (edges[:-1] + edges[1:]) / 2
-    df["bin"] = pd.cut(df["TransactionDT"], bins=50, labels=False)
-    agg = (df.groupby("bin")
-           .agg(count=("TransactionID", "count"),
-                fraud_rate=("isFraud", "mean"))
-           .reset_index())
-    x_vals = [midpoints[int(b)] for b in agg["bin"]]
-
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(go.Bar(x=x_vals, y=agg["count"], name="Volume",
-                         marker_color="grey", opacity=0.6), secondary_y=False)
-    fig.add_trace(go.Scatter(x=x_vals, y=agg["fraud_rate"] * 100,
-                             name="Fraud Rate %",
-                             line=dict(color="crimson"), mode="lines"),
-                  secondary_y=True)
-    fig.update_layout(title="Volume & Fraud Rate Over Time",
-                      height=_CHART_H, margin=_CHART_MARGIN, showlegend=False)
-    fig.update_yaxes(title_text="Transaction Count", secondary_y=False)
-    fig.update_yaxes(title_text="Fraud Rate %", secondary_y=True)
-    col.plotly_chart(fig, use_container_width=True)
 
 
 # ---------------------------------------------------------------------------
@@ -459,7 +378,7 @@ def _explanation_panel(full_df: pd.DataFrame, role: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _tab_dashboard(full_df: pd.DataFrame) -> None:
-    """Tab 1: sidebar filters, KPIs, 2×3 chart grid, table, explanation."""
+    """Tab 1: sidebar filters, KPIs, 1×3 chart row, table, explanation."""
     filters = _render_sidebar(full_df)
     filtered_df = _apply_filters(full_df, filters)
     threshold = filters["threshold"]
@@ -468,15 +387,10 @@ def _tab_dashboard(full_df: pd.DataFrame) -> None:
     _kpi_row(filtered_df, full_df, threshold)
     st.divider()
 
-    r1c1, r1c2, r1c3 = st.columns(3)
-    _chart_score_dist(r1c1, filtered_df, threshold)
-    _chart_scatter(r1c2, filtered_df, threshold)
-    _chart_product_bar(r1c3, filtered_df)
-
-    r2c1, r2c2, r2c3 = st.columns(3)
-    _chart_domain_bar(r2c1, filtered_df, threshold)
-    _chart_hour_bar(r2c2, full_df, threshold)
-    _chart_volume_time(r2c3, full_df)
+    c1, c2, c3 = st.columns(3)
+    _chart_score_dist(c1, filtered_df, threshold)
+    _chart_scatter(c2, filtered_df, threshold)
+    _chart_product_bar(c3, filtered_df)
 
     st.divider()
     _transaction_table(filtered_df, role)
