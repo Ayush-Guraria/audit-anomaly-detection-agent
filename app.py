@@ -82,7 +82,7 @@ def make_chart_layout(title: str, xaxis_title: str = "",
     """
     layout: dict = dict(
         title=dict(
-            text=title,
+            text=f"<b>{title}</b>",
             font=dict(family=_FONT, size=14, color=TEXT_PRIMARY),
             x=0,
         ),
@@ -289,7 +289,7 @@ def _chart_score_dist(col: st.delta_generator.DeltaGenerator,
     fig.add_trace(go.Histogram(x=above, name="At/above threshold",
                                marker_color=DANGER, opacity=0.7))
     fig.add_vline(x=threshold, line_dash="dash", line_color=DANGER,
-                  annotation_text=f">={threshold} flagged",
+                  annotation_text=f"≥{threshold} flagged",
                   annotation_font_color=DANGER, annotation_font_size=10)
     fig.update_layout(**make_chart_layout(
         "Score Distribution", "Ensemble Score", "Transaction Count",

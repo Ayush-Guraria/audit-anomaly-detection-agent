@@ -35,6 +35,19 @@ flowchart LR
 
 ---
 
+## Screenshots
+
+![Full dashboard with KPI cards and communicating charts](Screenshots/01_dashboard.png)
+*Full dashboard with KPI cards and communicating charts*
+
+![Claude-generated explanation with policy references and suggested actions](Screenshots/02_explaination.png)
+*Claude-generated explanation with policy references and suggested actions*
+
+![Audit trail logging all reviewer actions](Screenshots/03_audit_trail.png)
+*Audit trail logging all reviewer actions*
+
+---
+
 ## Tech Stack
 
 - **ML:** scikit-learn (IsolationForest, LogisticRegression), XGBoost, pandas, numpy
