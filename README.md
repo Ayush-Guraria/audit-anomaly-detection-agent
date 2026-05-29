@@ -57,10 +57,10 @@ flowchart LR
 
 ## Limitations
 
-- **Synthetic policy documents** — the three `.md` files in `policies/` are illustrative placeholders, not real compliance documents.
-- **Mock RBAC** — the Reviewer / Senior Auditor role selector is UI-only; no authentication or permission enforcement backs it.
-- **Public Kaggle dataset** — trained on the [IEEE-CIS Fraud Detection](https://www.kaggle.com/c/ieee-fraud-detection) dataset; performance on real production data is unknown.
-- **No model versioning** — a single `.pkl` artifact per model; no experiment tracking or rollback.
-- **No production monitoring** — score drift, data drift, and model staleness are not tracked.
-- **Single LLM** — no fallback if the Claude API is unavailable or rate-limited.
+- **Synthetic policy documents:** the three `.md` files in `policies/` are illustrative placeholders, not real compliance documents.
+- **Mock RBAC:** the Reviewer / Senior Auditor role selector is UI-only; no authentication or permission enforcement backs it.
+- **Public Kaggle dataset:** trained on the [IEEE-CIS Fraud Detection](https://www.kaggle.com/c/ieee-fraud-detection) dataset; performance on real production data is unknown.
+- **No model versioning:** a single `.pkl` artifact per model; no experiment tracking or rollback.
+- **No production monitoring:** score drift, data drift, and model staleness are not tracked.
+- **Single LLM:** no fallback if the Claude API is unavailable or rate-limited.
 ---
