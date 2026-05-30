@@ -389,6 +389,7 @@ def _transaction_table(filtered_df: pd.DataFrame, role: str) -> None:
     ] if c in display.columns]
 
     st.subheader(f"Flagged Transactions ({len(top):,})")
+    st.caption("👆 Click any row to load a Claude-generated explanation below the table.")
     event = st.dataframe(display[show_cols], use_container_width=True,
                          height=400, on_select="rerun",
                          selection_mode="single-row", key="tx_table")
@@ -539,6 +540,13 @@ def main() -> None:
                        layout="wide", page_icon="🔍")
     st.markdown(_CSS, unsafe_allow_html=True)
     st.title("Audit Anomaly Detection Agent")
+    st.caption(
+        "An ensemble ML model (Isolation Forest + XGBoost + Logistic Regression) "
+        "scores every transaction for anomalies. Use the sidebar to filter by score "
+        "threshold, product, or card type — then select any flagged transaction below "
+        "to get a plain-English explanation powered by Claude, complete with policy "
+        "references and suggested follow-up actions."
+    )
 
     _init_rag_index()
     full_df = load_data()
