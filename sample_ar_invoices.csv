@@ -1,0 +1,17 @@
+invoice_number,client_name,amount_due,due_date,days_overdue
+INV-1001,Copperline Industrial,12728.26,2026-06-20,11
+INV-1014,Cascade Ridge Builders,39206.41,2026-02-10,141
+INV-1002,Wrenhollow Media,13133.0,2026-06-04,27
+INV-1013,Amberton Consulting LLC,44850.03,2026-02-26,125
+INV-1016,Marlowe & Finch Design,15676.76,2026-03-31,92
+INV-1012,Prairie Bell Foods,10565.45,2026-04-02,90
+INV-1005,Ironvale Manufacturing,18671.76,2026-05-08,54
+INV-1008,Oakmoor Freight Systems,49407.72,2026-05-24,38
+INV-1010,Northfield Office Supply,31885.09,2026-04-21,71
+INV-1003,Solstice Retail Group,30947.95,2026-06-11,20
+INV-1009,Vantage Point Analytics,9409.44,2026-04-25,67
+INV-1015,Bluewater Logistics Co.,25949.5,2026-02-09,142
+INV-1011,Silverbrook Textiles,34486.74,2026-04-20,72
+INV-1007,Eastgate Hardware,10553.57,2026-05-13,49
+INV-1006,Fernway Dental Partners,31259.39,2026-05-10,52
+INV-1004,Granite Creek Distributors,40653.5,2026-06-20,11
