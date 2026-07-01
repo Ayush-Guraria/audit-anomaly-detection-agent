@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ar_automation import render_ar_tab
 from src.audit_log import get_recent_logs, log_action
 from src.explain import explain_transaction
 from src.rag_index import build_index
@@ -552,11 +553,13 @@ def main() -> None:
     full_df = load_data()
     _init_session_state(full_df)
 
-    tab1, tab2 = st.tabs(["📊 Dashboard", "📋 Audit Trail"])
+    tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📋 Audit Trail", "🧾 AR Automation"])
     with tab1:
         _tab_dashboard(full_df)
     with tab2:
         _tab_audit_trail()
+    with tab3:
+        render_ar_tab()
 
 
 if __name__ == "__main__":
